@@ -205,7 +205,7 @@ func SpawnAnt(ctx context.Context, ps peerstore.Peerstore, ds ds.Batching, cfg *
 		kad.BootstrapPeers(cfg.BootstrapPeers...),
 		kad.V1ProtocolOverride(protocol.ID(cfg.ProtocolID)),
 		kad.Datastore(ds),
-		kad.OnRequestHook(onRequestHook(h, cfg)),
+		kad.OnRequestHook(OnRequestHook(h, cfg)),
 	}
 	dht, err := kad.New(ctx, h, dhtOpts...)
 	if err != nil {
@@ -280,7 +280,7 @@ func SpawnAnt(ctx context.Context, ps peerstore.Peerstore, ds ds.Batching, cfg *
 	return ant, nil
 }
 
-func onRequestHook(h host.Host, cfg *AntConfig) func(ctx context.Context, s network.Stream, req pb.Message) {
+func OnRequestHook(h host.Host, cfg *AntConfig) func(ctx context.Context, s network.Stream, req pb.Message) {
 	return func(ctx context.Context, s network.Stream, req pb.Message) {
 		remotePeer := s.Conn().RemotePeer()
 
