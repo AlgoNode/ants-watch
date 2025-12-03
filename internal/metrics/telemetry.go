@@ -9,7 +9,7 @@ import (
 	"net/http"
 	_ "net/http/pprof"
 
-	"github.com/ipfs/go-log/v2"
+	logging "github.com/ipfs/go-log/v2"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracegrpc"
 	"go.opentelemetry.io/otel/exporters/prometheus"
@@ -23,7 +23,7 @@ import (
 	"go.uber.org/atomic"
 )
 
-var logger = log.Logger("telemetry")
+var logger = logging.Logger("ants-queen")
 
 const (
 	MeterName  = "github.com/probe-lab/ants-watch"

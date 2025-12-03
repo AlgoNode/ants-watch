@@ -14,7 +14,7 @@ import (
 
 	"github.com/probe-lab/ants-watch"
 	"github.com/probe-lab/ants-watch/db"
-	"github.com/probe-lab/ants-watch/metrics"
+	"github.com/probe-lab/ants-watch/internal/metrics"
 )
 
 var logger = logging.Logger("ants-queen")
@@ -60,8 +60,8 @@ var queenConfig = struct {
 	CrawlInterval:      120 * time.Minute,
 	CacheSize:          10_000,
 	BucketSize:         20,
-	UserAgent:          ants.UserAgent(ants.CelestiaMainnet),
-	Network:            string(ants.CelestiaMainnet),
+	UserAgent:          ants.UserAgent(ants.AlgorandMN),
+	Network:            string(ants.AlgorandMN),
 	ThrottleTimeout:    5 * time.Minute,
 }
 
@@ -332,6 +332,7 @@ func runQueenCommand(c *cli.Context) error {
 		BootstrapPeers:     ants.BootstrapPeers(ants.Network(queenConfig.Network)),
 		ProtocolID:         ants.ProtocolID(ants.Network(queenConfig.Network)),
 		Telemetry:          telemetry,
+		Network:            queenConfig.Network,
 	}
 
 	// initializing queen

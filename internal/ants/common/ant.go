@@ -1,4 +1,4 @@
-package ants
+package common
 
 import (
 	"context"
@@ -7,6 +7,7 @@ import (
 
 	"github.com/caddyserver/certmagic"
 	ds "github.com/ipfs/go-datastore"
+	logging "github.com/ipfs/go-log/v2"
 	p2pforge "github.com/ipshipyard/p2p-forge/client"
 	"github.com/libp2p/go-libp2p"
 	kad "github.com/libp2p/go-libp2p-kad-dht"
@@ -27,13 +28,22 @@ import (
 	libp2pwebtransport "github.com/libp2p/go-libp2p/p2p/transport/webtransport"
 	"github.com/multiformats/go-multiaddr"
 	mh "github.com/multiformats/go-multihash"
+	"github.com/probe-lab/ants-watch/internal/keys"
+	"github.com/probe-lab/ants-watch/internal/metrics"
 	"github.com/probe-lab/go-libdht/kad/key/bit256"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/metric"
 	"go.uber.org/zap"
-
-	"github.com/probe-lab/ants-watch/metrics"
 )
+
+var logger = logging.Logger("ants-queen")
+
+type Ant interface {
+	Close() error
+	GetPrivateKey() crypto.PrivKey
+	GetKadID() bit256.Key
+	GetPort() int
+}
 
 type RequestEvent struct {
 	Timestamp    time.Time
@@ -94,17 +104,17 @@ func (cfg *AntConfig) Validate() error {
 	return nil
 }
 
-type Ant struct {
-	cfg            *AntConfig
-	host           host.Host
-	dht            *kad.IpfsDHT
-	certMgr        *p2pforge.P2PForgeCertMgr
-	kadID          bit256.Key
-	certLoadedChan chan struct{}
-	sub            event.Subscription
+type CommonAnt struct {
+	Cfg            *AntConfig
+	Host           host.Host
+	Dht            *kad.IpfsDHT
+	CertMgr        *p2pforge.P2PForgeCertMgr
+	KadID          bit256.Key
+	CertLoadedChan chan struct{}
+	Sub            event.Subscription
 }
 
-func SpawnAnt(ctx context.Context, ps peerstore.Peerstore, ds ds.Batching, cfg *AntConfig) (*Ant, error) {
+func SpawnAnt(ctx context.Context, ps peerstore.Peerstore, ds ds.Batching, cfg *AntConfig) (*CommonAnt, error) {
 	if cfg == nil {
 		return nil, fmt.Errorf("no config given")
 	} else if err := cfg.Validate(); err != nil {
@@ -201,7 +211,7 @@ func SpawnAnt(ctx context.Context, ps peerstore.Peerstore, ds ds.Batching, cfg *
 	if err != nil {
 		return nil, fmt.Errorf("new libp2p dht: %w", err)
 	}
-	logger.Debugf("spawned ant. kadid: %s, peerid: %s", PeerIDToKadID(h.ID()).HexString(), h.ID())
+	logger.Debugf("spawned ant. kadid: %s, peerid: %s", keys.PeerIDToKadID(h.ID()).HexString(), h.ID())
 
 	if err = dht.Bootstrap(ctx); err != nil {
 		logger.Warn("bootstrap failed: %s", err)
@@ -257,14 +267,14 @@ func SpawnAnt(ctx context.Context, ps peerstore.Peerstore, ds ds.Batching, cfg *
 		}
 	}()
 
-	ant := &Ant{
-		cfg:            cfg,
-		host:           h,
-		dht:            dht,
-		certMgr:        certMgr,
-		certLoadedChan: certLoadedChan,
-		sub:            sub,
-		kadID:          PeerIDToKadID(h.ID()),
+	ant := &CommonAnt{
+		Cfg:            cfg,
+		Host:           h,
+		Dht:            dht,
+		CertMgr:        certMgr,
+		CertLoadedChan: certLoadedChan,
+		Sub:            sub,
+		KadID:          keys.PeerIDToKadID(h.ID()),
 	}
 
 	return ant, nil
@@ -297,16 +307,28 @@ func onRequestHook(h host.Host, cfg *AntConfig) func(ctx context.Context, s netw
 	}
 }
 
-func (a *Ant) Close() error {
-	if err := a.sub.Close(); err != nil {
+func (a *CommonAnt) GetPort() int {
+	return a.Cfg.Port
+}
+
+func (a *CommonAnt) GetPrivateKey() crypto.PrivKey {
+	return a.Cfg.PrivateKey
+}
+
+func (a *CommonAnt) GetKadID() bit256.Key {
+	return a.KadID
+}
+
+func (a *CommonAnt) Close() error {
+	if err := a.Sub.Close(); err != nil {
 		logger.Warnf("failed to close address update subscription: %s", err)
 	}
 
-	a.certMgr.Stop()
-	close(a.certLoadedChan)
+	a.CertMgr.Stop()
+	close(a.CertLoadedChan)
 
-	if err := a.dht.Close(); err != nil {
+	if err := a.Dht.Close(); err != nil {
 		logger.Warnf("failed to close dht: %s", err)
 	}
-	return a.host.Close()
+	return a.Host.Close()
 }

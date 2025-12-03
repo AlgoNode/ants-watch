@@ -10,7 +10,7 @@ import (
 	lru "github.com/hashicorp/golang-lru/v2"
 	ds "github.com/ipfs/go-datastore"
 	leveldb "github.com/ipfs/go-ds-leveldb"
-	"github.com/ipfs/go-log/v2"
+	logging "github.com/ipfs/go-log/v2"
 	"github.com/libp2p/go-libp2p/core/crypto"
 	"github.com/libp2p/go-libp2p/core/peer"
 	"github.com/libp2p/go-libp2p/core/peerstore"
@@ -25,10 +25,13 @@ import (
 	"go.opentelemetry.io/otel/metric"
 
 	"github.com/probe-lab/ants-watch/db"
-	"github.com/probe-lab/ants-watch/metrics"
+	"github.com/probe-lab/ants-watch/internal/ants/algorand"
+	"github.com/probe-lab/ants-watch/internal/ants/common"
+	"github.com/probe-lab/ants-watch/internal/keys"
+	"github.com/probe-lab/ants-watch/internal/metrics"
 )
 
-var logger = log.Logger("ants-queen")
+var logger = logging.Logger("ants-queen")
 
 type QueenConfig struct {
 	KeysDBPath         string
@@ -47,6 +50,7 @@ type QueenConfig struct {
 	ProtocolID         string
 	ThrottleTimeout    time.Duration
 	Telemetry          *metrics.Telemetry
+	Network            string
 }
 
 type Queen struct {
@@ -54,13 +58,13 @@ type Queen struct {
 
 	id       string
 	nebulaDB *NebulaDB
-	keysDB   *KeysDB
+	keysDB   *keys.KeysDB
 
 	peerstore peerstore.Peerstore
 	datastore ds.Batching
 
-	ants       []*Ant
-	antsEvents chan RequestEvent
+	ants       []common.Ant
+	antsEvents chan common.RequestEvent
 
 	peerSeen *lru.Cache[peer.ID, time.Time]
 
@@ -73,6 +77,9 @@ type Queen struct {
 }
 
 func NewQueen(clickhouseClient db.Client, cfg *QueenConfig) (*Queen, error) {
+
+	logger.Infow("New queen", "Network", cfg.Network, "Protocol", cfg.ProtocolID, "UA", cfg.UserAgent)
+
 	ps, err := pstoremem.NewPeerstore()
 	if err != nil {
 		return nil, fmt.Errorf("creating peerstore: %w", err)
@@ -92,11 +99,11 @@ func NewQueen(clickhouseClient db.Client, cfg *QueenConfig) (*Queen, error) {
 		cfg:              cfg,
 		id:               uuid.NewString(),
 		nebulaDB:         NewNebulaDB(cfg.NebulaDBConnString, cfg.UserAgent, cfg.CrawlInterval),
-		keysDB:           NewKeysDB(cfg.KeysDBPath),
+		keysDB:           keys.NewKeysDB(cfg.KeysDBPath),
 		peerstore:        ps,
 		datastore:        ldb,
-		ants:             []*Ant{},
-		antsEvents:       make(chan RequestEvent, 1024),
+		ants:             []common.Ant{},
+		antsEvents:       make(chan common.RequestEvent, 1024),
 		peerSeen:         cache,
 		clickhouseClient: clickhouseClient,
 		portsOccupancy:   make([]bool, cfg.NPorts),
@@ -216,7 +223,7 @@ func (q *Queen) consumeAntsEvents(ctx context.Context) {
 	}
 }
 
-func (q *Queen) toDatabaseRequest(evt RequestEvent) (*db.Request, error) {
+func (q *Queen) toDatabaseRequest(evt common.RequestEvent) (*db.Request, error) {
 	protocolStrs := protocol.ConvertToStrings(evt.Protocols)
 	sort.Strings(protocolStrs)
 
@@ -241,6 +248,7 @@ func (q *Queen) toDatabaseRequest(evt RequestEvent) (*db.Request, error) {
 		MultiAddresses: maddrStrs,
 		ConnMaddr:      evt.ConnMaddr.String(),
 	}
+	logger.Debugw("Request", "Type", evt.Type, "Remote", evt.Remote, "Addr", evt.ConnMaddr.String(), "UA", evt.AgentVersion)
 
 	return dbReq, nil
 }
@@ -249,7 +257,7 @@ func (q *Queen) persistLiveAntsKeys() {
 	logger.Debugln("Persisting live ants keys")
 	antsKeys := make([]crypto.PrivKey, 0, len(q.ants))
 	for _, ant := range q.ants {
-		antsKeys = append(antsKeys, ant.cfg.PrivateKey)
+		antsKeys = append(antsKeys, ant.GetPrivateKey())
 	}
 	q.keysDB.MatchingKeys(nil, antsKeys)
 	logger.Debugf("Number of antsKeys persisted: %d", len(antsKeys))
@@ -268,7 +276,7 @@ func (q *Queen) routine(ctx context.Context) {
 	// build a binary trie from the network peers
 	networkTrie := trie.New[bit256.Key, peer.ID]()
 	for _, peerId := range networkPeers {
-		networkTrie.Add(PeerIDToKadID(peerId), peerId)
+		networkTrie.Add(keys.PeerIDToKadID(peerId), peerId)
 	}
 
 	// zones correspond to the prefixes of the tries that must be covered by an
@@ -288,7 +296,7 @@ func (q *Queen) routine(ctx context.Context) {
 	for index, ant := range q.ants {
 		matchedKey := false
 		for i, missingKey := range missingKeys {
-			if key.CommonPrefixLength(ant.kadID, missingKey) == missingKey.BitLen() {
+			if key.CommonPrefixLength(ant.GetKadID(), missingKey) == missingKey.BitLen() {
 				// remove key from missingKeys since covered by exisitng
 				missingKeys = append(missingKeys[:i], missingKeys[i+1:]...)
 				matchedKey = true
@@ -311,8 +319,8 @@ func (q *Queen) routine(ctx context.Context) {
 	returnedKeys := make([]crypto.PrivKey, len(excessAntsIndices))
 	for i, index := range excessAntsIndices {
 		ant := q.ants[index]
-		returnedKeys[i] = ant.cfg.PrivateKey
-		port := ant.cfg.Port
+		returnedKeys[i] = ant.GetPrivateKey()
+		port := ant.GetPort()
 
 		if err := ant.Close(); err != nil {
 			logger.Warn("error closing ant", err)
@@ -332,7 +340,7 @@ func (q *Queen) routine(ctx context.Context) {
 			continue
 		}
 
-		antCfg := &AntConfig{
+		antCfg := &common.AntConfig{
 			PrivateKey:     key,
 			UserAgent:      q.cfg.UserAgent,
 			Port:           port,
@@ -342,8 +350,15 @@ func (q *Queen) routine(ctx context.Context) {
 			CertPath:       q.cfg.CertsPath,
 			Telemetry:      q.cfg.Telemetry,
 		}
+		var ant common.Ant
 
-		ant, err := SpawnAnt(ctx, q.peerstore, q.datastore, antCfg)
+		switch Network(q.cfg.Network) {
+		case AlgorandMN:
+			ant, err = algorand.SpawnAlgorandAnt(ctx, q.peerstore, q.datastore, antCfg)
+		default:
+			ant, err = common.SpawnAnt(ctx, q.peerstore, q.datastore, antCfg)
+		}
+
 		if err != nil {
 			logger.Warn("error creating ant", err)
 			continue

@@ -1,4 +1,4 @@
-package ants
+package keys
 
 import (
 	"crypto/rand"

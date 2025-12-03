@@ -1,4 +1,4 @@
-package ants
+package keys
 
 import (
 	"crypto/ed25519"
@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"io"
 	"os"
+
+	logging "github.com/ipfs/go-log/v2"
 
 	"github.com/ipfs/go-cid"
 	"github.com/libp2p/go-libp2p/core/crypto"
@@ -18,6 +20,8 @@ import (
 	"github.com/probe-lab/go-libdht/kad/key/bitstr"
 	"github.com/probe-lab/go-libdht/kad/trie"
 )
+
+var logger = logging.Logger("ants-queen")
 
 type KeysDB struct {
 	filepath string
