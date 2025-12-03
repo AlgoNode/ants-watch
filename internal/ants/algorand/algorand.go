@@ -95,7 +95,7 @@ func SpawnAlgorandAnt(ctx context.Context, ps peerstore.Peerstore, ds ds.Batchin
 		},
 	})
 
-	//h.SetStreamHandler(protocol.ID("/nodely-honeypot/1.0.0"), handleStreamBH)
+	h.SetStreamHandler(protocol.ID("/nodely-honeypot/1.0.0"), handleStreamBH)
 	//h.SetStreamHandler(protocol.ID(AlgorandWsProtocolV1), handleStreamBH)
 	h.SetStreamHandler(protocol.ID(AlgorandWsProtocolV22), handleStreamBH)
 
@@ -174,7 +174,7 @@ func (a *AlgorandAnt) AdvertiseLoop() {
 	logger.Info("Advertising loop is up.")
 
 	for !a.Stopped() {
-		if !a.Sleep(time.Second * 60) {
+		if !a.Sleep(time.Second * 15) {
 			return
 		}
 		for i := range advertiseList {
@@ -185,7 +185,7 @@ func (a *AlgorandAnt) AdvertiseLoop() {
 			logger.Infow("Advertising service", "service", advertiseList[i], "ant", a.CommonAnt.Host.ID())
 
 			// Advertise with a TTL (time-to-live) - the advertisement will be valid for the specified duration
-			ttl, err := routingDiscovery.Advertise(a.Context(), string(advertiseList[i]), discovery.TTL(time.Hour))
+			ttl, err := routingDiscovery.Advertise(a.Context(), string(advertiseList[i]), discovery.TTL(time.Minute*30))
 			if err != nil {
 				logger.Errorf("advertise service %s: %s", advertiseList[i], err)
 				continue
@@ -200,13 +200,6 @@ func (a *AlgorandAnt) AdvertiseLoop() {
 }
 
 func handleStreamBH(s network.Stream) {
-	logger.Infof("Received new stream from peer: %s using protocol: %s\n", s.Conn().RemotePeer(), s.Protocol())
-
-	// Read one message and close the stream
-	buf := make([]byte, 1024)
-	if n, _ := s.Read(buf); n >= 2 {
-		logger.Warnf("Received payload", "Peer", s.Conn().RemotePeer(), "Legth", n, "MSG", string(buf[0:2]))
-	}
-
+	//	logger.Infof("Received new stream from peer: %s using protocol: %s\n", s.Conn().RemotePeer(), s.Protocol())
 	s.Close()
 }
