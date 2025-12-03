@@ -176,7 +176,8 @@ func (q *Queen) consumeAntsEvents(ctx context.Context) {
 			logger.Debugln("Number of requests remaining to be inserted:", len(requests))
 
 			if len(requests) > 0 {
-				if err := q.clickhouseClient.BulkInsertRequests(ctx, requests); err != nil {
+				ctx5s, _ := context.WithTimeout(context.Background(), time.Second*5)
+				if err := q.clickhouseClient.BulkInsertRequests(ctx5s, requests); err != nil {
 					logger.Errorf("Error inserting requests: %v", err)
 				}
 			}
