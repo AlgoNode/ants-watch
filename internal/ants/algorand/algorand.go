@@ -175,12 +175,12 @@ func (a *AlgorandAnt) AdvertiseLoop() {
 				return
 			}
 			// Advertise the "gossip" service
-			logger.Infow("Advertising gossip service", "service", advertiseList[i], "ant", a.CommonAnt.Host.ID())
+			logger.Infow("Advertising service", "service", advertiseList[i], "ant", a.CommonAnt.Host.ID())
 
 			// Advertise with a TTL (time-to-live) - the advertisement will be valid for the specified duration
 			ttl, err := routingDiscovery.Advertise(a.Context(), string(advertiseList[i]), discovery.TTL(time.Hour))
 			if err != nil {
-				logger.Errorf("advertise gossip service %s: %s", advertiseList[i], err)
+				logger.Errorf("advertise service %s: %s", advertiseList[i], err)
 				continue
 			}
 
