@@ -90,7 +90,7 @@ func ProtocolID(net Network) string {
 	case AvailMainnetLC:
 		return "/avail_kad/id/1.0.0-b91746"
 	case AlgorandMN:
-		return algorand.ProtocolID
+		return algorand.AlgorandKadProtocolID
 	default:
 		panic(fmt.Sprint("unexpected network", net))
 	}

@@ -12,7 +12,9 @@ const (
 )
 
 const (
-	ProtocolID = "/algorand/kad/mainnet/kad/1.0.0"
+	AlgorandKadProtocolID = "/algorand/kad/mainnet/kad/1.0.0"
+	AlgorandWsProtocolV22 = "/algorand-ws/2.2.0"
+	AlgorandWsProtocolV1  = "/algorand-ws/1.0.0"
 )
 
 var advertiseList = []Capability{
