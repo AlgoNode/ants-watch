@@ -17,8 +17,6 @@ import (
 	"github.com/libp2p/go-libp2p/core/protocol"
 	"github.com/libp2p/go-libp2p/p2p/discovery/routing"
 	rcmgr "github.com/libp2p/go-libp2p/p2p/host/resource-manager"
-	"github.com/libp2p/go-libp2p/p2p/muxer/yamux"
-	"github.com/libp2p/go-libp2p/p2p/security/noise"
 	libp2ptcp "github.com/libp2p/go-libp2p/p2p/transport/tcp"
 	"github.com/probe-lab/ants-watch/internal/ants/common"
 	"github.com/probe-lab/ants-watch/internal/keys"
@@ -57,21 +55,21 @@ func SpawnAlgorandAnt(ctx context.Context, ps peerstore.Peerstore, ds ds.Batchin
 		fmt.Sprintf("/ip4/0.0.0.0/tcp/%d", cfg.Port),
 		fmt.Sprintf("/ip6/::/tcp/%d", cfg.Port),
 	}
-	ymx := *yamux.DefaultTransport
+	//ymx := *yamux.DefaultTransport
 
 	opts := []libp2p.Option{
 		libp2p.UserAgent(cfg.UserAgent),
 		libp2p.Identity(cfg.PrivateKey),
 		libp2p.Peerstore(ps),
 		libp2p.DisableRelay(),
-		libp2p.Muxer("/yamux/1.0.0", &ymx),
+		//	libp2p.Muxer("/yamux/1.0.0", &ymx),
 		libp2p.ListenAddrStrings(listenAddrs...),
 		libp2p.DisableMetrics(),
 		libp2p.ShareTCPListener(),
 		libp2p.ResourceManager(rm),
 		libp2p.ConnectionManager(connmgr.NullConnMgr{}),
 		libp2p.Transport(libp2ptcp.NewTCPTransport),
-		libp2p.Security(noise.ID, noise.New),
+		//libp2p.Security(noise.ID, noise.New),
 		libp2p.AddrsFactory(addressFilter),
 	}
 
@@ -83,9 +81,6 @@ func SpawnAlgorandAnt(ctx context.Context, ps peerstore.Peerstore, ds ds.Batchin
 	if err != nil {
 		return nil, fmt.Errorf("new libp2p host: %w", err)
 	}
-	h.SetStreamHandler(protocol.ID("/nodely-honeypot/1.0.0"), handleStreamBH)
-	h.SetStreamHandler(protocol.ID(AlgorandWsProtocolV1), handleStreamBH)
-	h.SetStreamHandler(protocol.ID(AlgorandWsProtocolV22), handleStreamBH)
 
 	h.Network().Notify(&network.NotifyBundle{
 		ConnectedF: func(n network.Network, conn network.Conn) {
@@ -99,6 +94,10 @@ func SpawnAlgorandAnt(ctx context.Context, ps peerstore.Peerstore, ds ds.Batchin
 			))
 		},
 	})
+
+	//h.SetStreamHandler(protocol.ID("/nodely-honeypot/1.0.0"), handleStreamBH)
+	//h.SetStreamHandler(protocol.ID(AlgorandWsProtocolV1), handleStreamBH)
+	h.SetStreamHandler(protocol.ID(AlgorandWsProtocolV22), handleStreamBH)
 
 	dhtOpts := []kad.Option{
 		kad.Mode(kad.ModeServer),
@@ -175,7 +174,7 @@ func (a *AlgorandAnt) AdvertiseLoop() {
 	logger.Info("Advertising loop is up.")
 
 	for !a.Stopped() {
-		if !a.Sleep(time.Minute) {
+		if !a.Sleep(time.Second * 60) {
 			return
 		}
 		for i := range advertiseList {

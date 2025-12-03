@@ -18,7 +18,7 @@ const (
 )
 
 var advertiseList = []Capability{
-	Archival, Gossip, Catchpoints,
+	Gossip,
 }
 
 var MainNetBootStrapList = []string{
